@@ -5,9 +5,16 @@ export default defineConfig({
     index: 'src/index.ts',
     vite: 'src/vite.ts',
     next: 'src/next.ts',
+    cli: 'src/cli.ts',
   },
   format: ['esm', 'cjs'],
-  dts: true,
+  dts: {
+    entry: {
+      index: 'src/index.ts',
+      vite: 'src/vite.ts',
+      next: 'src/next.ts',
+    },
+  },
   splitting: true,
   clean: true,
   sourcemap: true,

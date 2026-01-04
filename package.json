@@ -20,6 +20,9 @@
       "require": "./dist/next.cjs"
     }
   },
+  "bin": {
+    "metadata-plugin": "./dist/cli.js"
+  },
   "files": [
     "dist"
   ],
