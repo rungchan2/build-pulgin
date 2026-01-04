@@ -1,6 +1,6 @@
 {
   "name": "get-metadata",
-  "version": "0.1.0",
+  "version": "1.0.2",
   "description": "Build plugin for extracting project metadata for ticket analysis system",
   "type": "module",
   "exports": {
@@ -21,7 +21,7 @@
     }
   },
   "bin": {
-    "get-metadata": "./dist/cli.js"
+    "get-metadata": "dist/cli.js"
   },
   "files": [
     "dist"

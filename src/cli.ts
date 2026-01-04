@@ -7,7 +7,7 @@ import { FileWriter } from './core/output/file-writer';
 import { ApiSender } from './core/output/api-sender';
 import type { PluginConfig } from './core/types';
 
-const VERSION = '0.1.0';
+const VERSION = '1.0.2';
 
 const HELP_TEXT = `
 get-metadata - 프로젝트 메타데이터 추출 도구
