@@ -6,8 +6,29 @@ import { createDefaultConfig } from './core/config';
 import { FileWriter } from './core/output/file-writer';
 import { ApiSender } from './core/output/api-sender';
 import type { PluginConfig } from './core/types';
+import {
+  detectProject,
+  getProjectTypeLabel,
+  type ProjectType,
+  type PackageManager,
+} from './cli/detector';
+import {
+  selectProjectType,
+  selectPackageManager,
+  confirmBuildIntegration,
+  askApiEndpoint,
+  confirm,
+  close as closePrompts,
+} from './cli/prompts';
+import {
+  writeMetadataConfig,
+  addVitePlugin,
+  addNextPlugin,
+  getInstallCommand,
+  type InitOptions,
+} from './cli/config-writer';
 
-const VERSION = '1.0.1';
+const VERSION = '1.0.3';
 
 const HELP_TEXT = `
 metadatafy - 프로젝트 메타데이터 추출 도구
@@ -17,16 +38,16 @@ Usage:
 
 Commands:
   analyze     프로젝트를 분석하고 메타데이터 생성
-  init        설정 파일 생성
+  init        인터랙티브 설정 및 빌드 도구 연동
 
 Options:
   -h, --help       도움말 표시
   -v, --version    버전 표시
 
 Examples:
+  metadatafy init
   metadatafy analyze
   metadatafy analyze --project-id my-project --output ./metadata.json
-  metadatafy init
 `;
 
 const ANALYZE_HELP = `
@@ -182,51 +203,111 @@ async function runAnalyze(args: string[]) {
 
 async function runInit() {
   const rootDir = process.cwd();
-  const configPath = path.join(rootDir, 'metadata.config.json');
+  const projectId = path.basename(rootDir);
 
-  // 이미 존재하는지 확인
-  try {
-    await fs.access(configPath);
-    console.log(`⚠️  Config file already exists: ${configPath}`);
-    process.exit(1);
-  } catch {
-    // 파일이 없으면 계속 진행
+  console.log('\n🚀 metadatafy 설정 마법사\n');
+  console.log(`프로젝트: ${projectId}`);
+  console.log(`경로: ${rootDir}`);
+
+  // 프로젝트 감지
+  console.log('\n🔍 프로젝트 분석 중...');
+  const projectInfo = await detectProject(rootDir);
+
+  console.log(`\n✅ 감지된 정보:`);
+  console.log(`   프로젝트 타입: ${getProjectTypeLabel(projectInfo.type)}`);
+  console.log(`   패키지 매니저: ${projectInfo.packageManager}`);
+  console.log(`   TypeScript: ${projectInfo.hasTypescript ? '예' : '아니오'}`);
+  if (projectInfo.existingFolders.length > 0) {
+    console.log(`   주요 폴더: ${projectInfo.existingFolders.slice(0, 5).join(', ')}`);
   }
 
-  const defaultConfig = {
-    projectId: path.basename(rootDir),
-    include: [
-      'app/**/*.{ts,tsx}',
-      'pages/**/*.{ts,tsx}',
-      'components/**/*.{ts,tsx}',
-      'hooks/**/*.{ts,tsx}',
-      'services/**/*.ts',
-      'lib/**/*.ts',
-      'src/**/*.{ts,tsx}',
-    ],
-    exclude: [
-      '**/node_modules/**',
-      '**/.next/**',
-      '**/dist/**',
-      '**/*.test.{ts,tsx}',
-      '**/*.spec.{ts,tsx}',
-    ],
-    output: {
-      file: {
-        enabled: true,
-        path: 'project-metadata.json',
-      },
-      api: {
-        enabled: false,
-        endpoint: '',
-      },
-    },
-    koreanKeywords: {},
-    verbose: false,
-  };
+  try {
+    // 프로젝트 타입 선택
+    const projectType = await selectProjectType(projectInfo.type);
 
-  await fs.writeFile(configPath, JSON.stringify(defaultConfig, null, 2));
-  console.log(`✅ Created config file: ${configPath}`);
+    // 패키지 매니저 선택
+    const packageManager = await selectPackageManager(projectInfo.packageManager);
+
+    // 빌드 도구 연동
+    let addBuildIntegration = false;
+    if (projectType !== 'node' && projectType !== 'unknown') {
+      addBuildIntegration = await confirmBuildIntegration(projectType);
+    }
+
+    // API 엔드포인트
+    const apiEndpoint = await askApiEndpoint();
+
+    const options: InitOptions = {
+      projectType,
+      packageManager,
+      projectInfo,
+      addBuildIntegration,
+      apiEndpoint,
+    };
+
+    // 설정 파일 확인
+    const configPath = path.join(rootDir, 'metadata.config.json');
+    let shouldWriteConfig = true;
+    try {
+      await fs.access(configPath);
+      console.log(`\n⚠️  metadata.config.json 파일이 이미 존재합니다.`);
+      shouldWriteConfig = await confirm('덮어쓸까요?', false);
+    } catch {
+      // 파일 없음
+    }
+
+    console.log('\n📝 설정 적용 중...\n');
+
+    // 설정 파일 생성
+    if (shouldWriteConfig) {
+      const configFilePath = await writeMetadataConfig(rootDir, projectId, options);
+      console.log(`✅ 설정 파일 생성: ${path.relative(rootDir, configFilePath)}`);
+    }
+
+    // 빌드 도구 연동
+    if (addBuildIntegration) {
+      let success = false;
+      if (projectType === 'vite' || projectType === 'cra') {
+        success = await addVitePlugin(rootDir);
+      } else if (projectType.startsWith('nextjs')) {
+        success = await addNextPlugin(rootDir);
+      }
+
+      if (success) {
+        const configName = projectType.startsWith('nextjs') ? 'next.config' : 'vite.config';
+        console.log(`✅ ${configName} 파일에 플러그인 추가됨`);
+      } else {
+        console.log(`⚠️  빌드 설정 파일을 찾을 수 없습니다. 수동으로 추가해주세요.`);
+      }
+    }
+
+    // 완료 메시지
+    console.log('\n🎉 설정이 완료되었습니다!\n');
+
+    // 패키지가 설치되어 있는지 확인
+    const packageJsonPath = path.join(rootDir, 'package.json');
+    try {
+      const pkgContent = await fs.readFile(packageJsonPath, 'utf-8');
+      const pkg = JSON.parse(pkgContent);
+      const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+
+      if (!allDeps['metadatafy']) {
+        console.log('📦 다음 명령어로 패키지를 설치하세요:\n');
+        console.log(`   ${getInstallCommand(packageManager)}\n`);
+      }
+    } catch {
+      // package.json 없음
+    }
+
+    if (addBuildIntegration) {
+      console.log('🔧 빌드 시 자동으로 메타데이터가 생성됩니다.');
+    } else {
+      console.log('💡 수동 분석 명령어:\n');
+      console.log('   npx metadatafy analyze\n');
+    }
+  } finally {
+    closePrompts();
+  }
 }
 
 main().catch((error) => {

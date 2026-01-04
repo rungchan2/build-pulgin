@@ -81,6 +81,48 @@ export default defineConfig({
 
 ### Next.js Plugin
 
+#### Next.js 16+ (Turbopack) - Recommended
+
+Next.js 16부터 Turbopack이 기본 번들러입니다. Turbopack은 Webpack 플러그인을 지원하지 않으므로, Build Adapter 방식을 사용합니다.
+
+Since Next.js 16, Turbopack is the default bundler. Since Turbopack doesn't support Webpack plugins, use the Build Adapter approach.
+
+**Step 1: Create adapter file / 어댑터 파일 생성**
+
+```javascript
+// metadata-adapter.js
+const { createMetadataAdapter } = require('metadatafy/next');
+
+module.exports = createMetadataAdapter({
+  projectId: 'my-project',
+  verbose: true,
+  output: {
+    file: { enabled: true, path: 'project-metadata.json' },
+  },
+});
+```
+
+**Step 2: Configure next.config / next.config 설정**
+
+```typescript
+// next.config.ts
+import type { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
+  experimental: {
+    adapterPath: require.resolve('./metadata-adapter.js'),
+  },
+};
+
+export default nextConfig;
+```
+
+#### Next.js 15 or Earlier (Webpack)
+
+For Next.js 15 or earlier, or when using `--webpack` flag:
+
+Next.js 15 이하 또는 `--webpack` 플래그 사용 시:
+
 ```javascript
 // next.config.js
 const { withMetadata } = require('metadatafy/next');
@@ -93,6 +135,20 @@ const nextConfig = {
 module.exports = withMetadata({
   projectId: 'my-project',
 })(nextConfig);
+```
+
+#### Alternative: CLI with npm scripts / 대안: npm 스크립트와 CLI
+
+Works with any Next.js version / 모든 Next.js 버전에서 동작:
+
+```json
+{
+  "scripts": {
+    "build": "next build",
+    "build:with-metadata": "next build && metadatafy analyze",
+    "metadata": "metadatafy analyze"
+  }
+}
 ```
 
 ## Configuration / 설정
@@ -236,4 +292,4 @@ Issues and pull requests are welcome!
 
 이슈와 풀 리퀘스트를 환영합니다!
 
-GitHub: https://github.com/rungchan2/get-metadata
+GitHub: https://github.com/rungchan2/metadatafy
