@@ -30,23 +30,79 @@ yarn add metadatafy
 pnpm add metadatafy
 ```
 
+## Quick Start / 빠른 시작
+
+The easiest way to get started is with the interactive setup wizard:
+
+가장 쉽게 시작하는 방법은 인터랙티브 설정 마법사를 사용하는 것입니다:
+
+```bash
+npx metadatafy init
+```
+
+This will:
+- Auto-detect your project type (Next.js, Vite, CRA, etc.)
+- Detect your package manager (npm, yarn, pnpm)
+- Create a `metadata.config.json` with optimized settings
+- Optionally add the plugin to your build config (vite.config.ts or next.config.js)
+
+이 명령어는:
+- 프로젝트 타입 자동 감지 (Next.js, Vite, CRA 등)
+- 패키지 매니저 감지 (npm, yarn, pnpm)
+- 최적화된 설정으로 `metadata.config.json` 생성
+- 선택적으로 빌드 설정에 플러그인 추가 (vite.config.ts 또는 next.config.js)
+
+```
+$ npx metadatafy init
+
+🚀 metadatafy 설정 마법사
+
+프로젝트: my-app
+경로: /Users/you/projects/my-app
+
+🔍 프로젝트 분석 중...
+
+✅ 감지된 정보:
+   프로젝트 타입: Next.js (App Router)
+   패키지 매니저: pnpm
+   TypeScript: 예
+   주요 폴더: app, components, hooks, lib
+
+📦 프로젝트 타입을 선택하세요:
+  1) Next.js (App Router) (감지됨)
+  2) Next.js (Pages Router)
+  3) Vite + React
+  4) Create React App
+  5) Node.js Backend
+
+선택 [1]:
+```
+
 ## Usage / 사용법
 
 ### CLI
 
 ```bash
+# Interactive setup (recommended for new projects)
+# 인터랙티브 설정 (새 프로젝트에 권장)
+npx metadatafy init
+
 # Analyze project and generate metadata
 # 프로젝트 분석 및 메타데이터 생성
 npx metadatafy analyze
 
 # With options / 옵션과 함께
 npx metadatafy analyze --project-id my-project --output ./metadata.json --verbose
-
-# Generate config file / 설정 파일 생성
-npx metadatafy init
 ```
 
-#### CLI Options / CLI 옵션
+#### CLI Commands / CLI 명령어
+
+| Command | Description |
+|---------|-------------|
+| `init` | Interactive setup wizard / 인터랙티브 설정 마법사 |
+| `analyze` | Analyze project and generate metadata / 프로젝트 분석 및 메타데이터 생성 |
+
+#### Analyze Options / Analyze 옵션
 
 | Option | Short | Description |
 |--------|-------|-------------|
