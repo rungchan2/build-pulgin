@@ -7,13 +7,13 @@ import { FileWriter } from './core/output/file-writer';
 import { ApiSender } from './core/output/api-sender';
 import type { PluginConfig } from './core/types';
 
-const VERSION = '1.0.2';
+const VERSION = '1.0.0';
 
 const HELP_TEXT = `
-get-metadata - 프로젝트 메타데이터 추출 도구
+metadatafy - 프로젝트 메타데이터 추출 도구
 
 Usage:
-  get-metadata <command> [options]
+  metadatafy <command> [options]
 
 Commands:
   analyze     프로젝트를 분석하고 메타데이터 생성
@@ -24,13 +24,13 @@ Options:
   -v, --version    버전 표시
 
 Examples:
-  get-metadata analyze
-  get-metadata analyze --project-id my-project --output ./metadata.json
-  get-metadata init
+  metadatafy analyze
+  metadatafy analyze --project-id my-project --output ./metadata.json
+  metadatafy init
 `;
 
 const ANALYZE_HELP = `
-Usage: get-metadata analyze [options]
+Usage: metadatafy analyze [options]
 
 Options:
   -p, --project-id <id>   프로젝트 ID (기본값: 폴더명)
