@@ -102,29 +102,6 @@ export async function confirmBuildIntegration(projectType: ProjectType): Promise
   return answer.trim().toLowerCase() !== 'n';
 }
 
-/**
- * API 엔드포인트 설정
- */
-export async function askApiEndpoint(): Promise<string | null> {
-  console.log('\n☁️  API 엔드포인트로 메타데이터를 전송할까요?');
-  console.log('  빈칸으로 두면 파일만 생성됩니다.');
-
-  const answer = await question('\nAPI URL (선택사항): ');
-  const trimmed = answer.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  // URL 유효성 검사
-  try {
-    new URL(trimmed);
-    return trimmed;
-  } catch {
-    console.log('⚠️  유효하지 않은 URL입니다. API 전송을 건너뜁니다.');
-    return null;
-  }
-}
 
 /**
  * 확인
@@ -152,33 +129,61 @@ export async function askSupabaseIntegration(): Promise<boolean> {
 }
 
 /**
- * Supabase 설정 입력 (간단 버전)
+ * Supabase 설정 입력
  */
 export interface SupabaseSetupResult {
-  url: string;
-  serviceRoleKey: string;
+  /** 환경변수 이름 (config.json에 저장) */
+  urlEnvName: string;
+  serviceRoleKeyEnvName: string;
   tableName: string;
+  /** 실제 값 (.env에 저장) */
+  urlValue: string;
+  serviceRoleKeyValue: string;
 }
 
 export async function askSupabaseSetup(): Promise<SupabaseSetupResult | null> {
   console.log('\n🔧 Supabase 설정');
   console.log('Settings > API에서 확인할 수 있습니다.\n');
 
-  // 환경변수 사용 안내
-  console.log('💡 환경변수 이름을 입력하면 ${VAR} 형식으로 저장됩니다.');
-  console.log('   예: SUPABASE_URL → ${SUPABASE_URL}\n');
+  // 환경변수 이름 입력
+  console.log('📝 환경변수 이름 설정 (config.json에 저장됨)');
+  const urlEnvInput = await question('  Supabase URL 환경변수 이름 [SUPABASE_URL]: ');
+  const keyEnvInput = await question('  Service Role Key 환경변수 이름 [SUPABASE_SERVICE_ROLE_KEY]: ');
 
-  const urlInput = await question('Supabase URL 환경변수 이름 [SUPABASE_URL]: ');
-  const keyInput = await question('Service Role Key 환경변수 이름 [SUPABASE_SERVICE_ROLE_KEY]: ');
-  const tableInput = await question('테이블 이름 [project_metadata]: ');
+  const urlEnvName = urlEnvInput.trim() || 'SUPABASE_URL';
+  const keyEnvName = keyEnvInput.trim() || 'SUPABASE_SERVICE_ROLE_KEY';
 
-  const urlEnvName = urlInput.trim() || 'SUPABASE_URL';
-  const keyEnvName = keyInput.trim() || 'SUPABASE_SERVICE_ROLE_KEY';
+  // 실제 값 입력
+  console.log('\n🔑 환경변수 값 설정 (.env 파일에 저장됨)');
+  console.log('  ⚠️  Service Role Key는 절대 외부에 노출하지 마세요!\n');
+
+  const urlValue = await question(`  ${urlEnvName} 값 (예: https://xxx.supabase.co): `);
+  const keyValue = await question(`  ${keyEnvName} 값: `);
+
+  if (!urlValue.trim() || !keyValue.trim()) {
+    console.log('\n⚠️  URL과 Service Role Key는 필수입니다.');
+    const skipSetup = await confirm('환경변수 없이 계속할까요? (나중에 수동 설정 필요)', false);
+    if (skipSetup) {
+      return {
+        urlEnvName,
+        serviceRoleKeyEnvName: keyEnvName,
+        tableName: 'project_metadata',
+        urlValue: '',
+        serviceRoleKeyValue: '',
+      };
+    }
+    return null;
+  }
+
+  // 테이블 이름 입력
+  const tableInput = await question('\n  테이블 이름 [project_metadata]: ');
   const tableName = tableInput.trim() || 'project_metadata';
 
   return {
-    url: `\${${urlEnvName}}`,
-    serviceRoleKey: `\${${keyEnvName}}`,
+    urlEnvName,
+    serviceRoleKeyEnvName: keyEnvName,
     tableName,
+    urlValue: urlValue.trim(),
+    serviceRoleKeyValue: keyValue.trim(),
   };
 }

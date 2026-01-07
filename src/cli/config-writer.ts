@@ -7,11 +7,12 @@ export interface InitOptions {
   packageManager: PackageManager;
   projectInfo: ProjectInfo;
   addBuildIntegration: boolean;
-  apiEndpoint: string | null;
   supabase?: {
-    url: string;
-    serviceRoleKey: string;
+    urlEnvName: string;
+    serviceRoleKeyEnvName: string;
     tableName: string;
+    urlValue: string;
+    serviceRoleKeyValue: string;
   } | null;
 }
 
@@ -99,17 +100,13 @@ export async function writeMetadataConfig(
         enabled: true,
         path: 'project-metadata.json',
       },
-      api: {
-        enabled: !!options.apiEndpoint,
-        endpoint: options.apiEndpoint || '',
-      },
       ...(options.supabase && {
         database: {
           enabled: true,
           provider: 'supabase',
           supabase: {
-            url: options.supabase.url,
-            serviceRoleKey: options.supabase.serviceRoleKey,
+            url: `\${${options.supabase.urlEnvName}}`,
+            serviceRoleKey: `\${${options.supabase.serviceRoleKeyEnvName}}`,
             tableName: options.supabase.tableName,
             fields: {
               projectId: 'project_id',
@@ -127,6 +124,66 @@ export async function writeMetadataConfig(
 
   await fs.writeFile(configPath, JSON.stringify(config, null, 2));
   return configPath;
+}
+
+/**
+ * .env 파일에 환경변수 추가/업데이트
+ */
+export async function updateEnvFile(
+  rootDir: string,
+  envVars: Record<string, string>
+): Promise<{ created: boolean; updated: string[] }> {
+  const envPath = path.join(rootDir, '.env');
+  let existingContent = '';
+  let isNewFile = false;
+
+  try {
+    existingContent = await fs.readFile(envPath, 'utf-8');
+  } catch {
+    isNewFile = true;
+  }
+
+  const lines = existingContent.split('\n');
+  const existingVars = new Map<string, number>();
+  const updatedVars: string[] = [];
+
+  // 기존 변수 파싱
+  lines.forEach((line, index) => {
+    const match = line.match(/^([A-Z_][A-Z0-9_]*)=/);
+    if (match) {
+      existingVars.set(match[1], index);
+    }
+  });
+
+  // 새 변수 추가/업데이트
+  for (const [key, value] of Object.entries(envVars)) {
+    if (!value) continue; // 빈 값은 건너뛰기
+
+    const lineContent = `${key}=${value}`;
+
+    if (existingVars.has(key)) {
+      // 기존 변수 업데이트
+      const lineIndex = existingVars.get(key)!;
+      if (lines[lineIndex] !== lineContent) {
+        lines[lineIndex] = lineContent;
+        updatedVars.push(key);
+      }
+    } else {
+      // 새 변수 추가
+      lines.push(lineContent);
+      updatedVars.push(key);
+    }
+  }
+
+  // 빈 줄 정리 후 저장
+  const finalContent = lines
+    .filter((line, i, arr) => !(line === '' && arr[i + 1] === ''))
+    .join('\n')
+    .trim() + '\n';
+
+  await fs.writeFile(envPath, finalContent);
+
+  return { created: isNewFile, updated: updatedVars };
 }
 
 /**

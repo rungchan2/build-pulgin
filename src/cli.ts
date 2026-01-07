@@ -16,7 +16,6 @@ import {
   selectProjectType,
   selectPackageManager,
   confirmBuildIntegration,
-  askApiEndpoint,
   askSupabaseIntegration,
   askSupabaseSetup,
   confirm,
@@ -27,6 +26,7 @@ import {
   addVitePlugin,
   addNextPlugin,
   getInstallCommand,
+  updateEnvFile,
   type InitOptions,
 } from './cli/config-writer';
 import { runDatabaseInit, createProvider, type AnyDatabaseConfig } from './cli/database';
@@ -362,9 +362,6 @@ async function runInit() {
       addBuildIntegration = await confirmBuildIntegration(projectType);
     }
 
-    // API 엔드포인트
-    const apiEndpoint = await askApiEndpoint();
-
     // Supabase 연동
     let supabaseConfig = null;
     const wantSupabase = await askSupabaseIntegration();
@@ -377,7 +374,6 @@ async function runInit() {
       packageManager,
       projectInfo,
       addBuildIntegration,
-      apiEndpoint,
       supabase: supabaseConfig,
     };
 
@@ -442,17 +438,38 @@ async function runInit() {
       console.log('   npx metadatafy analyze\n');
     }
 
-    // Supabase 설정 안내
+    // Supabase 설정 및 .env 파일 저장
     if (supabaseConfig) {
-      console.log('🗄️  Supabase 연동이 설정되었습니다.');
-      console.log('   환경변수를 설정해주세요:\n');
+      // .env 파일에 환경변수 저장
+      if (supabaseConfig.urlValue && supabaseConfig.serviceRoleKeyValue) {
+        const envResult = await updateEnvFile(rootDir, {
+          [supabaseConfig.urlEnvName]: supabaseConfig.urlValue,
+          [supabaseConfig.serviceRoleKeyEnvName]: supabaseConfig.serviceRoleKeyValue,
+        });
 
-      const urlEnvName = supabaseConfig.url.slice(2, -1);
-      const keyEnvName = supabaseConfig.serviceRoleKey.slice(2, -1);
+        if (envResult.created) {
+          console.log(`✅ .env 파일 생성됨`);
+        } else {
+          console.log(`✅ .env 파일에 환경변수 추가됨: ${envResult.updated.join(', ')}`);
+        }
 
-      console.log(`   ${urlEnvName}=https://your-project.supabase.co`);
-      console.log(`   ${keyEnvName}=your-service-role-key\n`);
+        // .gitignore에 .env 확인
+        try {
+          const gitignorePath = path.join(rootDir, '.gitignore');
+          const gitignore = await fs.readFile(gitignorePath, 'utf-8');
+          if (!gitignore.includes('.env')) {
+            console.log('⚠️  .gitignore에 .env를 추가하는 것을 권장합니다!');
+          }
+        } catch {
+          console.log('⚠️  .gitignore 파일이 없습니다. .env를 추가하세요!');
+        }
+      } else {
+        console.log('⚠️  환경변수 값이 설정되지 않았습니다. 나중에 수동으로 설정해주세요:');
+        console.log(`   ${supabaseConfig.urlEnvName}=https://your-project.supabase.co`);
+        console.log(`   ${supabaseConfig.serviceRoleKeyEnvName}=your-service-role-key\n`);
+      }
 
+      console.log('\n🗄️  Supabase 연동이 설정되었습니다.');
       console.log('📋 Supabase에서 테이블을 생성하세요:\n');
       console.log(`   CREATE TABLE ${supabaseConfig.tableName} (`);
       console.log('     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,');
