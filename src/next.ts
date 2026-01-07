@@ -1,6 +1,6 @@
-export { withMetadata as default } from './adapters/next-adapter';
+export { withMetadatafy as default } from './adapters/next-adapter';
 export {
-  withMetadata,
+  withMetadatafy,
   createMetadataAdapter,
   generateAdapterFile,
 } from './adapters/next-adapter';

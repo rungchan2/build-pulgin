@@ -187,8 +187,18 @@ module.exports = createMetadataAdapter(${JSON.stringify(options, null, 2)});
  * Next.js 설정을 확장하는 함수
  * Next.js 16+ Turbopack: compiler.runAfterProductionCompile 사용
  * Next.js 15- Webpack: webpack 플러그인 사용 (폴백)
+ *
+ * @example
+ * // next.config.ts
+ * import { withMetadatafy } from 'metadatafy/next';
+ *
+ * const nextConfig = { ... };
+ * export default withMetadatafy()(nextConfig);
+ *
+ * // 또는 옵션과 함께
+ * export default withMetadatafy({ verbose: true })(nextConfig);
  */
-export function withMetadata(
+export function withMetadatafy(
   options: NextPluginOptions = {}
 ): (nextConfig: NextConfig) => NextConfig {
   const pluginConfig = createDefaultConfig(options);

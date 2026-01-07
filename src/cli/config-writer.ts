@@ -205,20 +205,20 @@ export async function addNextPlugin(rootDir: string): Promise<boolean> {
       if (content.includes('export default')) {
         content = content.replace(
           /export default\s+({[\s\S]*?});?\s*$/m,
-          'export default withMetadatafy($1);'
+          'export default withMetadatafy()($1);'
         );
         content = content.replace(
           /export default\s+(\w+);?\s*$/m,
-          'export default withMetadatafy($1);'
+          'export default withMetadatafy()($1);'
         );
       } else if (content.includes('module.exports')) {
         content = content.replace(
           /module\.exports\s*=\s*({[\s\S]*?});?\s*$/m,
-          'module.exports = withMetadatafy($1);'
+          'module.exports = withMetadatafy()($1);'
         );
         content = content.replace(
           /module\.exports\s*=\s*(\w+);?\s*$/m,
-          'module.exports = withMetadatafy($1);'
+          'module.exports = withMetadatafy()($1);'
         );
       }
 
