@@ -1,9 +1,13 @@
-import type { AnalysisResult } from '../../../core/types';
+import type { AnalysisResult, CodeIndexItem } from '../../../core/types';
 import type { DatabaseProvider } from '../provider';
 import type { SupabaseConfig, UploadResult } from '../types';
 
 /**
  * Supabase 프로바이더
+ *
+ * 테이블 구조:
+ * - code_index: 개별 코드 파일 메타데이터 (각 파일이 하나의 row)
+ * - code_analysis_log: 분석 실행 로그
  */
 export class SupabaseProvider implements DatabaseProvider {
   name = 'Supabase';
@@ -22,6 +26,17 @@ export class SupabaseProvider implements DatabaseProvider {
   }
 
   /**
+   * 공통 헤더
+   */
+  private getHeaders(): Record<string, string> {
+    return {
+      'apikey': this.config.serviceRoleKey,
+      'Authorization': `Bearer ${this.config.serviceRoleKey}`,
+      'Content-Type': 'application/json',
+    };
+  }
+
+  /**
    * 연결 테스트
    */
   async testConnection(): Promise<boolean> {
@@ -29,88 +44,49 @@ export class SupabaseProvider implements DatabaseProvider {
       const response = await fetch(this.getRestUrl(this.config.tableName), {
         method: 'GET',
         headers: {
-          'apikey': this.config.serviceRoleKey,
-          'Authorization': `Bearer ${this.config.serviceRoleKey}`,
-          'Content-Type': 'application/json',
-          'Range': '0-0', // 첫 번째 row만 가져오기 (테스트용)
+          ...this.getHeaders(),
+          'Range': '0-0',
         },
       });
 
-      // 200 또는 206 (Partial Content) 또는 416 (빈 테이블)
       return response.ok || response.status === 416;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
 
   /**
    * 메타데이터 업로드
+   *
+   * 1. 기존 프로젝트 데이터 삭제
+   * 2. 새 데이터 bulk insert
+   * 3. 분석 로그 기록
    */
   async upload(result: AnalysisResult): Promise<UploadResult> {
-    const { fields, tableName } = this.config;
-
-    // 기존 데이터 확인 (upsert용)
-    const existingData = await this.findByProjectId(result.projectId);
-
-    const payload: Record<string, unknown> = {
-      [fields.projectId]: result.projectId,
-      [fields.metadata]: result,
-    };
-
-    if (fields.updatedAt) {
-      payload[fields.updatedAt] = new Date().toISOString();
-    }
-
-    if (!existingData && fields.createdAt) {
-      payload[fields.createdAt] = new Date().toISOString();
-    }
+    const { tableName } = this.config;
 
     try {
-      let response: Response;
+      // 1. 기존 프로젝트 데이터 삭제
+      await this.deleteByProjectId(result.projectId);
 
-      if (existingData) {
-        // UPDATE
-        response = await fetch(
-          `${this.getRestUrl(tableName)}?${fields.projectId}=eq.${result.projectId}`,
-          {
-            method: 'PATCH',
-            headers: {
-              'apikey': this.config.serviceRoleKey,
-              'Authorization': `Bearer ${this.config.serviceRoleKey}`,
-              'Content-Type': 'application/json',
-              'Prefer': 'return=representation',
-            },
-            body: JSON.stringify(payload),
-          }
-        );
-      } else {
-        // INSERT
-        response = await fetch(this.getRestUrl(tableName), {
-          method: 'POST',
-          headers: {
-            'apikey': this.config.serviceRoleKey,
-            'Authorization': `Bearer ${this.config.serviceRoleKey}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation',
-          },
-          body: JSON.stringify(payload),
-        });
+      // 2. 개별 파일 데이터 bulk insert
+      if (result.items.length > 0) {
+        const insertResult = await this.bulkInsertItems(result.items);
+        if (!insertResult.success) {
+          return insertResult;
+        }
       }
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        return {
-          success: false,
-          message: `Supabase API error: ${response.status}`,
-          error: errorText,
-        };
-      }
+      // 3. 분석 로그 기록
+      await this.logAnalysis(result);
 
-      const data = await response.json();
       return {
         success: true,
-        message: existingData ? 'Metadata updated' : 'Metadata created',
-        data,
+        message: `${result.items.length} files uploaded to ${tableName}`,
+        data: {
+          itemsCount: result.items.length,
+          stats: result.stats,
+        },
       };
     } catch (error) {
       return {
@@ -122,31 +98,109 @@ export class SupabaseProvider implements DatabaseProvider {
   }
 
   /**
-   * 프로젝트 ID로 기존 데이터 조회
+   * 프로젝트 ID로 기존 데이터 삭제
    */
-  private async findByProjectId(projectId: string): Promise<unknown | null> {
-    try {
-      const { fields, tableName } = this.config;
-      const response = await fetch(
-        `${this.getRestUrl(tableName)}?${fields.projectId}=eq.${projectId}&limit=1`,
-        {
-          method: 'GET',
-          headers: {
-            'apikey': this.config.serviceRoleKey,
-            'Authorization': `Bearer ${this.config.serviceRoleKey}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+  private async deleteByProjectId(projectId: string): Promise<void> {
+    const { tableName } = this.config;
+
+    const response = await fetch(
+      `${this.getRestUrl(tableName)}?project_id=eq.${encodeURIComponent(projectId)}`,
+      {
+        method: 'DELETE',
+        headers: this.getHeaders(),
+      }
+    );
+
+    if (!response.ok && response.status !== 404) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete existing data: ${errorText}`);
+    }
+  }
+
+  /**
+   * 개별 파일 데이터 bulk insert
+   */
+  private async bulkInsertItems(items: CodeIndexItem[]): Promise<UploadResult> {
+    const { tableName } = this.config;
+
+    // CodeIndexItem을 테이블 row 형식으로 변환
+    const rows = items.map(item => ({
+      id: item.id,
+      project_id: item.projectId,
+      file_type: item.type,
+      name: item.name,
+      path: item.path,
+      keywords: item.keywords,
+      search_text: item.searchText,
+      calls: item.calls,
+      called_by: item.calledBy,
+      metadata: item.metadata,
+    }));
+
+    // Supabase는 한 번에 많은 row를 insert할 수 있음
+    // 하지만 너무 많으면 청크로 나눠서 처리
+    const CHUNK_SIZE = 500;
+    const chunks = this.chunkArray(rows, CHUNK_SIZE);
+
+    for (const chunk of chunks) {
+      const response = await fetch(this.getRestUrl(tableName), {
+        method: 'POST',
+        headers: {
+          ...this.getHeaders(),
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify(chunk),
+      });
 
       if (!response.ok) {
-        return null;
+        const errorText = await response.text();
+        return {
+          success: false,
+          message: `Failed to insert items`,
+          error: errorText,
+        };
       }
-
-      const data = await response.json();
-      return Array.isArray(data) && data.length > 0 ? data[0] : null;
-    } catch {
-      return null;
     }
+
+    return { success: true, message: 'Items inserted successfully' };
+  }
+
+  /**
+   * 분석 로그 기록
+   */
+  private async logAnalysis(result: AnalysisResult): Promise<void> {
+    const logTableName = 'code_analysis_log';
+
+    const logEntry = {
+      project_id: result.projectId,
+      total_files: result.stats.totalFiles,
+      stats: result.stats.byType,
+      parse_errors: result.stats.parseErrors,
+      analyzed_at: result.timestamp,
+    };
+
+    try {
+      await fetch(this.getRestUrl(logTableName), {
+        method: 'POST',
+        headers: {
+          ...this.getHeaders(),
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify(logEntry),
+      });
+    } catch {
+      // 로그 기록 실패는 무시 (메인 데이터는 이미 저장됨)
+    }
+  }
+
+  /**
+   * 배열을 청크로 나누기
+   */
+  private chunkArray<T>(array: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < array.length; i += size) {
+      chunks.push(array.slice(i, i + size));
+    }
+    return chunks;
   }
 }
