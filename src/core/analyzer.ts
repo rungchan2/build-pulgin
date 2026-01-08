@@ -115,7 +115,10 @@ export class ProjectAnalyzer {
   private async collectFiles(rootDir: string): Promise<string[]> {
     const allFiles: string[] = [];
 
-    for (const pattern of this.config.include) {
+    // 패턴 확장: hooks/** → hooks/** + **/hooks/** (src/hooks 등도 매칭)
+    const expandedPatterns = this.expandIncludePatterns(this.config.include);
+
+    for (const pattern of expandedPatterns) {
       const matches = await glob(pattern, {
         cwd: rootDir,
         ignore: this.config.exclude,
@@ -126,6 +129,38 @@ export class ProjectAnalyzer {
 
     // 중복 제거
     return [...new Set(allFiles)];
+  }
+
+  /**
+   * include 패턴 확장
+   * 예: hooks/** → [hooks/**, ** /hooks/**] (src/hooks 등도 매칭되도록)
+   */
+  private expandIncludePatterns(patterns: string[]): string[] {
+    const expanded: string[] = [];
+
+    for (const pattern of patterns) {
+      expanded.push(pattern);
+
+      // 이미 **/로 시작하거나 절대 경로면 확장 불필요
+      if (pattern.startsWith('**/') || pattern.startsWith('/')) {
+        continue;
+      }
+
+      // src/로 시작하는 패턴도 확장 불필요
+      if (pattern.startsWith('src/')) {
+        continue;
+      }
+
+      // 폴더명/** 패턴이면 **/폴더명/** 도 추가
+      // 예: hooks/** → **/hooks/**
+      // 예: lib/**/*.ts → **/lib/**/*.ts
+      const firstSegment = pattern.split('/')[0];
+      if (firstSegment && !firstSegment.includes('*')) {
+        expanded.push(`**/${pattern}`);
+      }
+    }
+
+    return expanded;
   }
 
   /**
