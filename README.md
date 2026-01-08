@@ -7,18 +7,22 @@ A build plugin for extracting project metadata from your codebase. Supports Vite
 ## Features / 기능
 
 - **AST-based analysis** - Parses TypeScript/JavaScript files using TypeScript compiler API
+- **Code pattern detection** - Automatically detects file types by analyzing actual code (hooks, components, services, etc.)
+- **Smart path detection** - Supports various folder structures and naming conventions
 - **Import/Export extraction** - Tracks file dependencies and call graphs
 - **Component props detection** - Extracts React component props
 - **Korean keyword mapping** - Automatic English-Korean keyword translation
-- **Multiple output formats** - JSON file or API endpoint
+- **Multiple output formats** - JSON file, API endpoint, or Supabase database
 
 ---
 
 - **AST 기반 분석** - TypeScript 컴파일러 API를 사용한 파일 파싱
+- **코드 패턴 감지** - 실제 코드 분석으로 파일 타입 자동 감지 (hooks, components, services 등)
+- **스마트 경로 감지** - 다양한 폴더 구조와 네이밍 컨벤션 지원
 - **Import/Export 추출** - 파일 의존성 및 호출 그래프 추적
 - **컴포넌트 Props 감지** - React 컴포넌트 props 추출
 - **한글 키워드 매핑** - 영어-한글 키워드 자동 변환
-- **다양한 출력 형식** - JSON 파일 또는 API 엔드포인트
+- **다양한 출력 형식** - JSON 파일, API 엔드포인트, 또는 Supabase 데이터베이스
 
 ## Installation / 설치
 
@@ -53,32 +57,6 @@ This will:
 - 최적화된 설정으로 `metadata.config.json` 생성
 - 선택적으로 빌드 설정에 플러그인 추가 (vite.config.ts 또는 next.config.js)
 - 선택적으로 Supabase 연동 설정 (자동 업로드)
-
-```
-$ npx metadatafy init
-
-🚀 metadatafy 설정 마법사
-
-프로젝트: my-app
-경로: /Users/you/projects/my-app
-
-🔍 프로젝트 분석 중...
-
-✅ 감지된 정보:
-   프로젝트 타입: Next.js (App Router)
-   패키지 매니저: pnpm
-   TypeScript: 예
-   주요 폴더: app, components, hooks, lib
-
-📦 프로젝트 타입을 선택하세요:
-  1) Next.js (App Router) (감지됨)
-  2) Next.js (Pages Router)
-  3) Vite + React
-  4) Create React App
-  5) Node.js Backend
-
-선택 [1]:
-```
 
 ## Usage / 사용법
 
@@ -130,15 +108,6 @@ npx metadatafy analyze --project-id my-project --output ./metadata.json --verbos
 | `--verbose` | | Enable detailed logging |
 | `--help` | `-h` | Show help |
 
-#### Upload Options / Upload 옵션
-
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--input` | `-i` | Input file path (default: project-metadata.json) |
-| `--config` | `-c` | Config file path |
-| `--verbose` | | Enable detailed logging |
-| `--help` | `-h` | Show help |
-
 ### Vite Plugin
 
 ```typescript
@@ -165,12 +134,6 @@ export default defineConfig({
 
 #### Next.js 16+ (Turbopack) - Recommended
 
-Next.js 16부터 Turbopack이 기본 번들러입니다. Turbopack은 Webpack 플러그인을 지원하지 않으므로, Build Adapter 방식을 사용합니다.
-
-Since Next.js 16, Turbopack is the default bundler. Since Turbopack doesn't support Webpack plugins, use the Build Adapter approach.
-
-**Step 1: Create adapter file / 어댑터 파일 생성**
-
 ```javascript
 // metadata-adapter.js
 const { createMetadataAdapter } = require('metadatafy/next');
@@ -183,8 +146,6 @@ module.exports = createMetadataAdapter({
   },
 });
 ```
-
-**Step 2: Configure next.config / next.config 설정**
 
 ```typescript
 // next.config.ts
@@ -201,37 +162,75 @@ export default nextConfig;
 
 #### Next.js 15 or Earlier (Webpack)
 
-For Next.js 15 or earlier, or when using `--webpack` flag:
-
-Next.js 15 이하 또는 `--webpack` 플래그 사용 시:
-
 ```javascript
 // next.config.js
 const { withMetadata } = require('metadatafy/next');
 
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  // your config
-};
+const nextConfig = {};
 
 module.exports = withMetadata({
   projectId: 'my-project',
 })(nextConfig);
 ```
 
-#### Alternative: CLI with npm scripts / 대안: npm 스크립트와 CLI
+## File Type Detection / 파일 타입 감지
 
-Works with any Next.js version / 모든 Next.js 버전에서 동작:
+metadatafy uses a **hybrid detection system** that combines multiple approaches:
+
+metadatafy는 여러 접근 방식을 결합한 **하이브리드 감지 시스템**을 사용합니다:
+
+### Detection Priority / 감지 우선순위
+
+1. **Next.js special files** - `page.tsx`, `layout.tsx`, `route.ts` → route/api
+2. **Path segments** - `/api/` in path → api
+3. **Folder names** - `components/`, `hooks/`, `utils/`, `lib/` → corresponding type
+4. **Code pattern analysis** - AST-based detection of actual code patterns
+5. **Glob patterns** - User-defined patterns in config
+
+### Code Pattern Detection / 코드 패턴 감지
+
+When folder/path detection fails, metadatafy analyzes the actual code:
+
+폴더/경로 감지가 실패하면 실제 코드를 분석합니다:
+
+| Type | Detection Pattern |
+|------|-------------------|
+| **hook** | Uses `useState`, `useEffect`, etc. / Function starts with `use` |
+| **component** | Returns JSX / Has `props` parameter |
+| **api** | Exports `GET`, `POST`, etc. / Uses `NextRequest`/`NextResponse` |
+| **service** | Uses `fetch`, `axios` / Multiple async functions / `*Service` class |
+| **utility** | Multiple exported functions / No React dependencies |
+
+### Supported Naming Conventions / 지원하는 네이밍 컨벤션
+
+All naming conventions are supported:
+
+모든 네이밍 컨벤션을 지원합니다:
+
+| Type | Examples |
+|------|----------|
+| **hook** | `useAuth.ts`, `use-auth.ts`, `use_auth.ts` |
+| **service** | `AuthService.ts`, `auth-service.ts`, `auth.service.ts` |
+| **utility** | `string-utils.ts`, `date_helper.ts`, `formatUtil.ts` |
+| **component** | `Button.tsx`, `auth-modal.tsx`, `user_profile.tsx` |
+
+### Auto Pattern Expansion / 자동 패턴 확장
+
+Include patterns are automatically expanded to match nested structures:
+
+include 패턴은 중첩 구조에 맞게 자동 확장됩니다:
 
 ```json
 {
-  "scripts": {
-    "build": "next build",
-    "build:with-metadata": "next build && metadatafy analyze",
-    "metadata": "metadatafy analyze"
-  }
+  "include": ["hooks/**/*.ts"]
 }
 ```
+
+This will match both:
+- `hooks/useAuth.ts`
+- `src/hooks/useAuth.ts`
+- `src/features/auth/hooks/useAuth.ts`
 
 ## Configuration / 설정
 
@@ -259,11 +258,13 @@ Create `metadata.config.json` in your project root:
       "enabled": true,
       "path": "project-metadata.json"
     },
-    "api": {
-      "enabled": false,
-      "endpoint": "https://your-api.com/metadata",
-      "headers": {
-        "Authorization": "Bearer YOUR_TOKEN"
+    "database": {
+      "enabled": true,
+      "provider": "supabase",
+      "supabase": {
+        "url": "${SUPABASE_URL}",
+        "serviceRoleKey": "${SUPABASE_SERVICE_ROLE_KEY}",
+        "tableName": "code_index"
       }
     }
   },
@@ -279,9 +280,8 @@ Create `metadata.config.json` in your project root:
 
 ```json
 {
-  "version": "1.0.0",
   "projectId": "my-project",
-  "generatedAt": "2025-01-04T12:00:00Z",
+  "timestamp": "2025-01-04T12:00:00Z",
   "stats": {
     "totalFiles": 150,
     "byType": {
@@ -313,17 +313,145 @@ Create `metadata.config.json` in your project root:
 }
 ```
 
-## File Type Detection / 파일 타입 감지
+## Database Integration / 데이터베이스 연동
 
-| Pattern | Type |
-|---------|------|
-| `app/**/page.tsx` | route |
-| `app/**/route.ts` | api |
-| `components/**/*.tsx` | component |
-| `hooks/**/*.ts` | hook |
-| `services/**/*.ts` | service |
-| `lib/**/*.ts` | utility |
-| `supabase/migrations/*.sql` | table |
+### Supabase Table Schema / Supabase 테이블 스키마
+
+metadatafy stores each file as an individual row for better queryability:
+
+metadatafy는 더 나은 쿼리를 위해 각 파일을 개별 row로 저장합니다:
+
+```sql
+-- File type enum
+CREATE TYPE file_type AS ENUM (
+  'route', 'component', 'hook', 'service', 'api', 'table', 'utility'
+);
+
+-- Main table: individual code file metadata
+CREATE TABLE code_index (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  file_type file_type NOT NULL,
+  name TEXT NOT NULL,
+  path TEXT NOT NULL,
+  keywords TEXT[] DEFAULT '{}',
+  search_text TEXT,
+  calls TEXT[] DEFAULT '{}',
+  called_by TEXT[] DEFAULT '{}',
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(project_id, path)
+);
+
+-- Analysis log table
+CREATE TABLE code_analysis_log (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  total_files INTEGER NOT NULL,
+  stats JSONB NOT NULL,
+  parse_errors TEXT[] DEFAULT '{}',
+  analyzed_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for search optimization
+CREATE INDEX idx_code_index_project_id ON code_index(project_id);
+CREATE INDEX idx_code_index_file_type ON code_index(file_type);
+CREATE INDEX idx_code_index_keywords ON code_index USING GIN(keywords);
+CREATE INDEX idx_code_index_search_text ON code_index USING GIN(to_tsvector('simple', search_text));
+
+-- RLS Policies
+ALTER TABLE code_index ENABLE ROW LEVEL SECURITY;
+ALTER TABLE code_analysis_log ENABLE ROW LEVEL SECURITY;
+
+-- Read access for authenticated users
+CREATE POLICY "Authenticated users can read code_index"
+  ON code_index FOR SELECT TO authenticated USING (true);
+
+-- Write access for service role only
+CREATE POLICY "Service role can manage code_index"
+  ON code_index FOR ALL TO service_role USING (true) WITH CHECK (true);
+```
+
+### Configuration / 설정
+
+```json
+{
+  "output": {
+    "database": {
+      "enabled": true,
+      "provider": "supabase",
+      "supabase": {
+        "url": "${SUPABASE_URL}",
+        "serviceRoleKey": "${SUPABASE_SERVICE_ROLE_KEY}",
+        "tableName": "code_index"
+      }
+    }
+  }
+}
+```
+
+### Environment Variables / 환경변수
+
+```bash
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+### How It Works / 작동 방식
+
+1. **Delete existing project data** - Removes all rows with matching `project_id`
+2. **Bulk insert new data** - Inserts all files in chunks of 500
+3. **Log analysis run** - Records stats in `code_analysis_log` table
+
+---
+
+1. **기존 프로젝트 데이터 삭제** - 동일한 `project_id`의 모든 row 삭제
+2. **새 데이터 일괄 삽입** - 500개 단위로 모든 파일 삽입
+3. **분석 로그 기록** - `code_analysis_log` 테이블에 통계 기록
+
+### Querying Code / 코드 쿼리 예시
+
+```sql
+-- Find all hooks in a project
+SELECT * FROM code_index
+WHERE project_id = 'my-project' AND file_type = 'hook';
+
+-- Full-text search
+SELECT * FROM code_index
+WHERE project_id = 'my-project'
+  AND search_text ILIKE '%authentication%';
+
+-- Find files that call a specific file
+SELECT * FROM code_index
+WHERE 'hooks/useAuth.ts' = ANY(calls);
+
+-- Get analysis history
+SELECT * FROM code_analysis_log
+WHERE project_id = 'my-project'
+ORDER BY analyzed_at DESC;
+```
+
+### Recommended Workflow / 권장 워크플로우
+
+```bash
+# Generate metadata + upload
+npx metadatafy analyze --upload
+
+# Or in CI/CD
+npx metadatafy analyze --upload
+```
+
+**GitHub Actions:**
+
+```yaml
+- run: npm run build
+- run: npx metadatafy analyze --upload
+  env:
+    SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+    SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+```
 
 ## API / 프로그래밍 방식 사용
 
@@ -356,160 +484,10 @@ Built-in mappings include common development terms:
 | search | 검색, 찾기 |
 | login | 로그인 |
 | user | 사용자, 유저, 회원 |
-| button | 버튼 |
-| modal | 모달, 팝업 |
-| ... | ... |
 
 You can extend with custom mappings in config.
 
 설정에서 커스텀 매핑을 추가할 수 있습니다.
-
-## Database Integration / 데이터베이스 연동
-
-Automatically upload metadata to Supabase on every build. Uses Service Role Key for RLS bypass.
-
-빌드할 때마다 자동으로 Supabase에 메타데이터를 업로드합니다. Service Role Key를 사용하여 RLS를 우회합니다.
-
-### Setup with init / init으로 설정
-
-The easiest way is through `npx metadatafy init`:
-
-가장 쉬운 방법은 `npx metadatafy init`을 사용하는 것입니다:
-
-```
-🗄️  Supabase에 메타데이터를 자동 저장할까요?
-  빌드 시 자동으로 데이터베이스에 업로드됩니다.
-
-Supabase 연동 설정? [y/N]: y
-
-🔧 Supabase 설정
-Settings > API에서 확인할 수 있습니다.
-
-💡 환경변수 이름을 입력하면 ${VAR} 형식으로 저장됩니다.
-   예: SUPABASE_URL → ${SUPABASE_URL}
-
-Supabase URL 환경변수 이름 [SUPABASE_URL]:
-Service Role Key 환경변수 이름 [SUPABASE_SERVICE_ROLE_KEY]:
-테이블 이름 [project_metadata]:
-```
-
-### Manual Setup / 수동 설정
-
-Or use the dedicated command:
-
-또는 전용 명령어를 사용하세요:
-
-```bash
-npx metadatafy database-init
-```
-
-### Direct Plugin Configuration / 플러그인 직접 설정
-
-You can also pass Supabase config directly to the plugin:
-
-플러그인에 직접 Supabase 설정을 전달할 수도 있습니다:
-
-```typescript
-// vite.config.ts
-import metadatafy from 'metadatafy/vite';
-
-export default defineConfig({
-  plugins: [
-    metadatafy({
-      projectId: 'my-project',
-      supabase: {
-        url: process.env.SUPABASE_URL!,
-        serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        tableName: 'project_metadata',
-      },
-    }),
-  ],
-});
-```
-
-```typescript
-// next.config.ts
-import { withMetadata } from 'metadatafy/next';
-
-export default withMetadata({
-  projectId: 'my-project',
-  supabase: {
-    url: process.env.SUPABASE_URL!,
-    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    tableName: 'project_metadata',
-  },
-})(nextConfig);
-```
-
-### Supabase Table Schema / Supabase 테이블 스키마
-
-```sql
-CREATE TABLE project_metadata (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  project_id TEXT UNIQUE NOT NULL,
-  metadata JSONB NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- RLS Policy (optional - Service Role Key bypasses RLS)
-ALTER TABLE project_metadata ENABLE ROW LEVEL SECURITY;
-```
-
-### Environment Variables / 환경변수
-
-Add to your `.env` file:
-
-`.env` 파일에 추가하세요:
-
-```bash
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-```
-
-> **Note**: Service Role Key is used (not anon key) to bypass RLS and ensure reliable upserts.
->
-> **참고**: RLS 우회 및 안정적인 upsert를 위해 Service Role Key를 사용합니다 (anon key가 아님).
-
-### How It Works / 작동 방식
-
-- **Upsert by project_id**: If a record with the same `project_id` exists, it updates. Otherwise, it creates a new record.
-- **Automatic on build**: When using Vite/Next.js plugins with Supabase config, metadata is uploaded on every build.
-- **CLI support**: `npx metadatafy analyze` also uploads if database config is in `metadata.config.json`.
-
-- **project_id 기준 upsert**: 동일한 `project_id`가 있으면 업데이트, 없으면 새로 생성합니다.
-- **빌드 시 자동 업로드**: Vite/Next.js 플러그인에 Supabase 설정이 있으면 빌드마다 자동 업로드됩니다.
-- **CLI 지원**: `npx metadatafy analyze --upload`로 DB에 업로드합니다.
-
-### Recommended Workflow / 권장 워크플로우
-
-Build and metadata generation are separate. Run manually or add to CI.
-
-빌드와 메타데이터 생성은 분리되어 있습니다. 수동으로 실행하거나 CI에 추가하세요.
-
-```bash
-# Regular build (unchanged)
-# 일반 빌드 (변경 없음)
-npm run build
-
-# Generate metadata + upload (when needed)
-# 메타데이터 생성 + 업로드 (필요할 때)
-npx metadatafy analyze --upload
-
-# Or upload existing file only
-# 또는 기존 파일만 업로드
-npx metadatafy upload
-```
-
-**For CI / GitHub Actions:**
-
-```yaml
-- run: npm run build
-- run: npx metadatafy analyze --upload
-  env:
-    SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-    SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-```
 
 ## License / 라이선스
 
