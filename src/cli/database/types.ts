@@ -19,6 +19,11 @@ export interface SupabaseConfig extends DatabaseConfig {
   url: string;
   serviceRoleKey: string;
   tableName: string;
+  /**
+   * 프로젝트 UUID (code_index.project_id에 저장될 값)
+   * projects 테이블의 UUID를 사용
+   */
+  projectUuid: string;
   fields: SupabaseFieldMapping;
 }
 
@@ -26,13 +31,13 @@ export interface SupabaseConfig extends DatabaseConfig {
  * Supabase 필드 매핑
  */
 export interface SupabaseFieldMapping {
-  /** 프로젝트 ID 저장 필드 */
+  /** 프로젝트 ID 컬럼명 (기본값: project_id) */
   projectId: string;
-  /** 메타데이터 JSON 저장 필드 */
+  /** 메타데이터 JSON 컬럼명 (기본값: metadata) */
   metadata: string;
-  /** 생성 시간 필드 (선택) */
+  /** 생성 시간 컬럼명 (선택) */
   createdAt?: string;
-  /** 업데이트 시간 필드 (선택) */
+  /** 업데이트 시간 컬럼명 (선택) */
   updatedAt?: string;
 }
 

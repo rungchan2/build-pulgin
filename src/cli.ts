@@ -511,12 +511,21 @@ async function loadDatabaseConfig(
       return null;
     }
 
+    // projectUuid 검증
+    const projectUuid = supabase.projectUuid;
+    if (!projectUuid) {
+      console.log('⚠️  프로젝트 UUID가 설정되지 않았습니다.');
+      console.log('   metadata.config.json의 supabase.projectUuid를 확인해주세요.');
+      return null;
+    }
+
     return {
       provider: 'supabase',
       enabled: true,
       url,
       serviceRoleKey,
       tableName: supabase.tableName,
+      projectUuid,
       fields: {
         projectId: supabase.fields.projectId,
         metadata: supabase.fields.metadata,

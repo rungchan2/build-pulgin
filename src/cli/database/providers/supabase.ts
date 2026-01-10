@@ -63,11 +63,11 @@ export class SupabaseProvider implements DatabaseProvider {
    * 3. 분석 로그 기록
    */
   async upload(result: AnalysisResult): Promise<UploadResult> {
-    const { tableName } = this.config;
+    const { tableName, projectUuid } = this.config;
 
     try {
       // 1. 기존 프로젝트 데이터 삭제
-      await this.deleteByProjectId(result.projectId);
+      await this.deleteByProjectId();
 
       // 2. 개별 파일 데이터 bulk insert
       if (result.items.length > 0) {
@@ -98,13 +98,14 @@ export class SupabaseProvider implements DatabaseProvider {
   }
 
   /**
-   * 프로젝트 ID로 기존 데이터 삭제
+   * 프로젝트 UUID로 기존 데이터 삭제
    */
-  private async deleteByProjectId(projectId: string): Promise<void> {
-    const { tableName } = this.config;
+  private async deleteByProjectId(): Promise<void> {
+    const { tableName, projectUuid, fields } = this.config;
+    const projectIdColumn = fields.projectId || 'project_id';
 
     const response = await fetch(
-      `${this.getRestUrl(tableName)}?project_id=eq.${encodeURIComponent(projectId)}`,
+      `${this.getRestUrl(tableName)}?${projectIdColumn}=eq.${encodeURIComponent(projectUuid)}`,
       {
         method: 'DELETE',
         headers: this.getHeaders(),
@@ -121,12 +122,13 @@ export class SupabaseProvider implements DatabaseProvider {
    * 개별 파일 데이터 bulk insert
    */
   private async bulkInsertItems(items: CodeIndexItem[]): Promise<UploadResult> {
-    const { tableName } = this.config;
+    const { tableName, projectUuid, fields } = this.config;
+    const projectIdColumn = fields.projectId || 'project_id';
 
     // CodeIndexItem을 테이블 row 형식으로 변환
+    // project_id는 config의 projectUuid 사용 (UUID 타입)
     const rows = items.map(item => ({
-      id: item.id,
-      project_id: item.projectId,
+      [projectIdColumn]: projectUuid,
       file_type: item.type,
       name: item.name,
       path: item.path,
@@ -169,10 +171,12 @@ export class SupabaseProvider implements DatabaseProvider {
    * 분석 로그 기록
    */
   private async logAnalysis(result: AnalysisResult): Promise<void> {
+    const { projectUuid, fields } = this.config;
     const logTableName = 'code_analysis_log';
+    const projectIdColumn = fields.projectId || 'project_id';
 
     const logEntry = {
-      project_id: result.projectId,
+      [projectIdColumn]: projectUuid,
       total_files: result.stats.totalFiles,
       stats: result.stats.byType,
       parse_errors: result.stats.parseErrors,

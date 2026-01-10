@@ -32,7 +32,8 @@ export interface VitePluginOptions extends Partial<PluginConfig> {
    *   supabase: {
    *     url: process.env.SUPABASE_URL,
    *     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-   *     tableName: 'project_metadata',
+   *     tableName: 'code_index',
+   *     projectUuid: 'd0de86ea-6414-4bdb-a30d-8656efec6602',
    *   }
    * })
    */
@@ -40,6 +41,8 @@ export interface VitePluginOptions extends Partial<PluginConfig> {
     url: string;
     serviceRoleKey: string;
     tableName: string;
+    /** 프로젝트 UUID (projects 테이블의 ID) */
+    projectUuid: string;
     fields?: {
       projectId?: string;
       metadata?: string;
@@ -89,7 +92,7 @@ async function runMetadataAnalysis(
   }
 
   // Supabase 업로드 (직접 전달된 경우)
-  if (supabaseOptions?.url && supabaseOptions?.serviceRoleKey) {
+  if (supabaseOptions?.url && supabaseOptions?.serviceRoleKey && supabaseOptions?.projectUuid) {
     try {
       const supabaseConfig: SupabaseConfig = {
         provider: 'supabase',
@@ -97,6 +100,7 @@ async function runMetadataAnalysis(
         url: supabaseOptions.url,
         serviceRoleKey: supabaseOptions.serviceRoleKey,
         tableName: supabaseOptions.tableName,
+        projectUuid: supabaseOptions.projectUuid,
         fields: {
           projectId: supabaseOptions.fields?.projectId || 'project_id',
           metadata: supabaseOptions.fields?.metadata || 'metadata',

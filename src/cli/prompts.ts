@@ -137,6 +137,8 @@ export interface SupabaseSetupResult {
   urlEnvName: string;
   serviceRoleKeyEnvName: string;
   tableName: string;
+  /** 프로젝트 UUID (projects 테이블의 ID) */
+  projectUuid: string;
 }
 
 export async function askSupabaseSetup(existingEnvVars: Record<string, string> = {}): Promise<SupabaseSetupResult | null> {
@@ -180,12 +182,32 @@ export async function askSupabaseSetup(existingEnvVars: Record<string, string> =
   }
 
   // 테이블 이름 입력
-  const tableInput = await question('\n테이블 이름 [project_metadata]: ');
-  const tableName = tableInput.trim() || 'project_metadata';
+  const tableInput = await question('\n테이블 이름 [code_index]: ');
+  const tableName = tableInput.trim() || 'code_index';
+
+  // 프로젝트 UUID 입력
+  console.log('\n📌 프로젝트 UUID (projects 테이블의 ID)');
+  console.log('   code_index.project_id에 저장될 UUID입니다.');
+  const projectUuidInput = await question('프로젝트 UUID: ');
+  const projectUuid = projectUuidInput.trim();
+
+  if (!projectUuid) {
+    console.log('\n⚠️  프로젝트 UUID는 필수입니다.');
+    return null;
+  }
+
+  // UUID 형식 검증
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(projectUuid)) {
+    console.log('\n⚠️  올바른 UUID 형식이 아닙니다.');
+    console.log('   예: d0de86ea-6414-4bdb-a30d-8656efec6602');
+    return null;
+  }
 
   return {
     urlEnvName,
     serviceRoleKeyEnvName: keyEnvName,
     tableName,
+    projectUuid,
   };
 }

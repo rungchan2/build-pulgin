@@ -131,12 +131,14 @@ export interface DatabaseOutputConfig {
 
   // Supabase 설정
   supabase?: {
-    url: string;        // ${SUPABASE_URL} 형식 지원
-    serviceRoleKey: string;    // ${SUPABASE_SERVICE_ROLE_KEY} 형식 지원
+    url: string;              // ${SUPABASE_URL} 형식 지원
+    serviceRoleKey: string;   // ${SUPABASE_SERVICE_ROLE_KEY} 형식 지원
     tableName: string;
+    /** 프로젝트 UUID (projects 테이블의 ID) */
+    projectUuid: string;
     fields: {
-      projectId: string;
-      metadata: string;
+      projectId: string;      // 컬럼명 (기본값: project_id)
+      metadata: string;       // 컬럼명 (기본값: metadata)
       createdAt?: string;
       updatedAt?: string;
     };

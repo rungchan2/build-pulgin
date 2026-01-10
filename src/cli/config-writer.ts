@@ -11,6 +11,7 @@ export interface InitOptions {
     urlEnvName: string;
     serviceRoleKeyEnvName: string;
     tableName: string;
+    projectUuid: string;
   } | null;
 }
 
@@ -106,6 +107,7 @@ export async function writeMetadataConfig(
             url: `\${${options.supabase.urlEnvName}}`,
             serviceRoleKey: `\${${options.supabase.serviceRoleKeyEnvName}}`,
             tableName: options.supabase.tableName,
+            projectUuid: options.supabase.projectUuid,
             fields: {
               projectId: 'project_id',
               metadata: 'metadata',

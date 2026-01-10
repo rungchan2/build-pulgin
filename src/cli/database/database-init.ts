@@ -144,8 +144,24 @@ async function configureSupabase(useEnvVars: boolean): Promise<{
   }
 
   // 테이블 이름
-  const tableInput = await question('\n테이블 이름 [project_metadata]: ');
-  const tableName = tableInput.trim() || 'project_metadata';
+  const tableInput = await question('\n테이블 이름 [code_index]: ');
+  const tableName = tableInput.trim() || 'code_index';
+
+  // 프로젝트 UUID 입력
+  console.log('\n📌 프로젝트 UUID (projects 테이블의 ID)');
+  console.log('   code_index.project_id에 저장될 UUID입니다.');
+  const projectUuidInput = await question('프로젝트 UUID: ');
+  const projectUuid = projectUuidInput.trim();
+
+  if (!projectUuid) {
+    throw new Error('프로젝트 UUID는 필수입니다.');
+  }
+
+  // UUID 형식 검증
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(projectUuid)) {
+    throw new Error('올바른 UUID 형식이 아닙니다. 예: d0de86ea-6414-4bdb-a30d-8656efec6602');
+  }
 
   // 필드 매핑
   console.log('\n📝 필드 매핑 설정');
@@ -163,6 +179,7 @@ async function configureSupabase(useEnvVars: boolean): Promise<{
       url: urlForConfig,
       serviceRoleKey: serviceRoleKeyForConfig,
       tableName,
+      projectUuid,
       fields: {
         projectId: projectIdField.trim() || 'project_id',
         metadata: metadataField.trim() || 'metadata',
@@ -202,6 +219,7 @@ async function testConnection(
     url: actualValues.url,
     serviceRoleKey: actualValues.serviceRoleKey,
     tableName: dbConfig.supabase.tableName,
+    projectUuid: dbConfig.supabase.projectUuid || '',
     fields: {
       projectId: dbConfig.supabase.fields.projectId,
       metadata: dbConfig.supabase.fields.metadata,
