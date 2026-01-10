@@ -1,6 +1,6 @@
 {
   "name": "metadatafy",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "Build plugin for extracting project metadata for ticket analysis system",
   "type": "module",
   "exports": {
