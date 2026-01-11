@@ -923,24 +923,7 @@ async function uploadToSupabase(
   const tableName = supabaseTable || 'code_index';
 
   try {
-    // 기존 데이터 삭제 (projectId 기준)
-    const deleteResponse = await fetch(
-      `${supabaseUrl}/rest/v1/${tableName}?project_id=eq.${projectIdForDb}`,
-      {
-        method: 'DELETE',
-        headers: {
-          'apikey': supabaseServiceRoleKey,
-          'Authorization': `Bearer ${supabaseServiceRoleKey}`,
-        },
-      }
-    );
-
-    if (!deleteResponse.ok && deleteResponse.status !== 404) {
-      const errorText = await deleteResponse.text();
-      throw new Error(`Delete failed: ${deleteResponse.status} - ${errorText}`);
-    }
-
-    // 새 데이터 삽입 (id는 DB에서 자동 생성 또는 UNIQUE 제약조건 사용)
+    // 데이터 준비
     const rows = result.items.map((item) => ({
       project_id: projectIdForDb,
       file_type: item.type,
@@ -953,23 +936,66 @@ async function uploadToSupabase(
       metadata: item.metadata,
     }));
 
-    const insertResponse = await fetch(
-      `${supabaseUrl}/rest/v1/${tableName}`,
+    // 현재 경로 목록
+    const currentPaths = new Set(result.items.map((item) => item.path));
+
+    // 1. 삭제된 파일 제거 (현재 분석 결과에 없는 파일)
+    // 먼저 기존 경로들을 조회
+    const existingResponse = await fetch(
+      `${supabaseUrl}/rest/v1/${tableName}?project_id=eq.${projectIdForDb}&select=path`,
+      {
+        method: 'GET',
+        headers: {
+          'apikey': supabaseServiceRoleKey,
+          'Authorization': `Bearer ${supabaseServiceRoleKey}`,
+        },
+      }
+    );
+
+    if (existingResponse.ok) {
+      const existingData = await existingResponse.json() as Array<{ path: string }>;
+      const pathsToDelete = existingData
+        .map((row) => row.path)
+        .filter((path) => !currentPaths.has(path));
+
+      // 삭제할 파일이 있으면 삭제
+      if (pathsToDelete.length > 0) {
+        for (const pathToDelete of pathsToDelete) {
+          await fetch(
+            `${supabaseUrl}/rest/v1/${tableName}?project_id=eq.${projectIdForDb}&path=eq.${encodeURIComponent(pathToDelete)}`,
+            {
+              method: 'DELETE',
+              headers: {
+                'apikey': supabaseServiceRoleKey,
+                'Authorization': `Bearer ${supabaseServiceRoleKey}`,
+              },
+            }
+          );
+        }
+        if (verbose) {
+          console.log(`   삭제된 파일: ${pathsToDelete.length}개`);
+        }
+      }
+    }
+
+    // 2. Upsert (UNIQUE 제약조건: project_id, path)
+    const upsertResponse = await fetch(
+      `${supabaseUrl}/rest/v1/${tableName}?on_conflict=project_id,path`,
       {
         method: 'POST',
         headers: {
           'apikey': supabaseServiceRoleKey,
           'Authorization': `Bearer ${supabaseServiceRoleKey}`,
           'Content-Type': 'application/json',
-          'Prefer': 'return=minimal',
+          'Prefer': 'resolution=merge-duplicates,return=minimal',
         },
         body: JSON.stringify(rows),
       }
     );
 
-    if (!insertResponse.ok) {
-      const error = await insertResponse.text();
-      throw new Error(`Insert failed: ${error}`);
+    if (!upsertResponse.ok) {
+      const error = await upsertResponse.text();
+      throw new Error(`Upsert failed: ${error}`);
     }
 
     console.log(`✅ 업로드 완료! (${result.items.length}개 파일)`);
