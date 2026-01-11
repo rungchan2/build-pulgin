@@ -37,7 +37,7 @@ import {
   type GlobalConfig,
 } from './cli/global-config';
 
-const VERSION = '2.0.0';
+const VERSION = '1.5.0';
 
 const HELP_TEXT = `
 metadatafy - 프로젝트 메타데이터 추출 도구
